@@ -4,6 +4,7 @@
     <title>Treasury Revenue Visualization</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
     <style>
+        /* ... [previous styles remain the same] ... */
         body {
             font-family: Arial, sans-serif;
             margin: 20px;
@@ -54,17 +55,19 @@
                 .toISOString().split('T')[0];
             
             const treasuryUrl = `https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/mts/mts_table_1?fields=record_date,receipts_amt&filter=record_date:gte:${startDate},record_date:lte:${endDate}&sort=-record_date&page[size]=120`;
-            const proxyUrl = 'https://corsproxy.io/?';
+            const proxyUrl = 'https://api.allorigins.win/get?url=';
             const url = proxyUrl + encodeURIComponent(treasuryUrl);
             
             try {
                 const response = await fetch(url);
                 if (!response.ok) throw new Error('Failed to fetch data');
-                const data = await response.json();
-                return data.data;
+                const result = await response.json();
+                
+                // api.allorigins.win wraps the response in a 'contents' field and returns it as a string
+                return JSON.parse(result.contents).data;
             } catch (error) {
                 console.error('Fetch error:', error);
-                throw new Error('Failed to load Treasury data. Please try again later.');
+                throw new Error('Failed to load Treasury data. Please check console for details.');
             }
         }
 
