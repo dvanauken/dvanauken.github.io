@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Treasury Revenue Visualization</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .title {
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+        }
+        #chart {
+            width: 100%;
+            height: 500px;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            font-size: 18px;
+            color: #666;
+        }
+        .error {
+            color: #dc3545;
+            text-align: center;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="title">U.S. Treasury Revenue (Last 10 Years)</h1>
+        <div id="chart">
+            <div class="loading">Loading data...</div>
+        </div>
+    </div>
+
+    <script>
+        async function fetchTreasuryData() {
+            const endDate = new Date().toISOString().split('T')[0];
+            const startDate = new Date(new Date().setFullYear(new Date().getFullYear() - 10))
+                .toISOString().split('T')[0];
+            
+            const treasuryUrl = `https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/mts/mts_table_1?fields=record_date,receipts_amt&filter=record_date:gte:${startDate},record_date:lte:${endDate}&sort=-record_date&page[size]=120`;
+            const proxyUrl = 'https://corsproxy.io/?';
+            const url = proxyUrl + encodeURIComponent(treasuryUrl);
+            
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error('Failed to fetch data');
+                const data = await response.json();
+                return data.data;
+            } catch (error) {
+                console.error('Fetch error:', error);
+                throw new Error('Failed to load Treasury data. Please try again later.');
+            }
+        }
+
+        async function createVisualization() {
+            try {
+                const data = await fetchTreasuryData();
+                
+                // Process the data
+                const processedData = data
+                    .map(d => ({
+                        date: new Date(d.record_date),
+                        value: parseFloat(d.receipts_amt)
+                    }))
+                    .sort((a, b) => a.date - b.date);
+
+                // Clear loading message
+                document.getElementById('chart').innerHTML = '';
+
+                // Set up dimensions
+                const margin = {top: 40, right: 60, bottom: 60, left: 80};
+                const width = document.getElementById('chart').offsetWidth - margin.left - margin.right;
+                const height = document.getElementById('chart').offsetHeight - margin.top - margin.bottom;
+
+                // Create SVG
+                const svg = d3.select('#chart')
+                    .append('svg')
+                        .attr('width', width + margin.left + margin.right)
+                        .attr('height', height + margin.top + margin.bottom)
+                    .append('g')
+                        .attr('transform', `translate(${margin.left},${margin.top})`);
+
+                // Create scales
+                const x = d3.scaleTime()
+                    .domain(d3.extent(processedData, d => d.date))
+                    .range([0, width]);
+
+                const y = d3.scaleLinear()
+                    .domain([0, d3.max(processedData, d => d.value)])
+                    .range([height, 0]);
+
+                // Create line
+                const line = d3.line()
+                    .x(d => x(d.date))
+                    .y(d => y(d.value))
+                    .curve(d3.curveMonotoneX);
+
+                // Add X axis
+                svg.append('g')
+                    .attr('transform', `translate(0,${height})`)
+                    .call(d3.axisBottom(x)
+                        .tickFormat(d3.timeFormat('%b %Y')))
+                    .selectAll('text')
+                        .style('text-anchor', 'end')
+                        .attr('dx', '-.8em')
+                        .attr('dy', '.15em')
+                        .attr('transform', 'rotate(-45)');
+
+                // Add Y axis
+                svg.append('g')
+                    .call(d3.axisLeft(y)
+                        .tickFormat(d => `$${d3.format(',.0f')(d / 1000000)}M`));
+
+                // Add line path
+                svg.append('path')
+                    .datum(processedData)
+                    .attr('fill', 'none')
+                    .attr('stroke', '#2563eb')
+                    .attr('stroke-width', 2)
+                    .attr('d', line);
+
+                // Add X axis label
+                svg.append('text')
+                    .attr('x', width / 2)
+                    .attr('y', height + margin.bottom - 5)
+                    .attr('text-anchor', 'middle')
+                    .style('font-size', '14px')
+                    .text('Date');
+
+                // Add Y axis label
+                svg.append('text')
+                    .attr('transform', 'rotate(-90)')
+                    .attr('y', -margin.left + 20)
+                    .attr('x', -height / 2)
+                    .attr('text-anchor', 'middle')
+                    .style('font-size', '14px')
+                    .text('Revenue (Millions USD)');
+
+            } catch (error) {
+                document.getElementById('chart').innerHTML = `
+                    <div class="error">
+                        ${error.message}
+                        <br>
+                        Please try again later.
+                    </div>
+                `;
+            }
+        }
+
+        // Start visualization when page loads
+        createVisualization();
+    </script>
+</body>
+</html>
